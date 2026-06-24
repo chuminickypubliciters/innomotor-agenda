@@ -334,10 +334,17 @@ function render() {
           <div class="topbar-sub">Agenda fiscal · B22503429</div>
         </div>
       </div>
-      <button class="topbar-bell" onclick="testAlarm()">
-        🔔
-        ${urgentCount > 0 ? '<span class="notif-dot"></span>' : ''}
-      </button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div title="Última actualización" style="font-size:10px;color:var(--text-secondary);text-align:right;line-height:1.4;cursor:default">
+          <div style="font-weight:600">🔄 v3</div>
+          <div>24/06/2026</div>
+          <div>20:30h</div>
+        </div>
+        <button class="topbar-bell" onclick="testAlarm()">
+          🔔
+          ${urgentCount > 0 ? '<span class="notif-dot"></span>' : ''}
+        </button>
+      </div>
     </div>`;
 
   // Stats
