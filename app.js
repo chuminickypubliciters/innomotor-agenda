@@ -59,12 +59,15 @@ const DEFAULT_TASKS = [
 ];
 
 // --- SCHEDULED ALARMS (time-based) ---
+// NOTA: Las alarmas programadas SIEMPRE se leen del código fuente.
+// El estado "fired" se guarda solo en memoria de sesión, no en localStorage,
+// para evitar que queden bloqueadas permanentemente.
 const SCHEDULED_ALARMS = [
   {
     id: "test-alarm-1",
-    title: "PRUEBA DE ALARMA PROGRAMADA",
-    desc: "Esto es una prueba del sistema de alarmas de INNOMOTOR Agenda. Si estás leyendo esto, las alarmas funcionan correctamente.",
-    time: "12:30",
+    title: "✅ PRUEBA DE ALARMA — SISTEMA OK",
+    desc: "Las alarmas programadas funcionan correctamente. Este mensaje confirma que el sistema de recordatorios de INNOMOTOR Agenda está operativo.",
+    time: "20:35",
     date: "2026-06-24",
     fired: false
   }
@@ -96,8 +99,9 @@ function loadData() {
     }
     const savedSettings = localStorage.getItem('innomotor_settings');
     if (savedSettings) settings = JSON.parse(savedSettings);
-    const savedScheduled = localStorage.getItem('innomotor_scheduled');
-    scheduledAlarms = savedScheduled ? JSON.parse(savedScheduled) : JSON.parse(JSON.stringify(SCHEDULED_ALARMS));
+    // Las alarmas programadas SIEMPRE se cargan desde el código fuente
+    // para que "fired" nunca quede bloqueado en localStorage entre sesiones.
+    scheduledAlarms = JSON.parse(JSON.stringify(SCHEDULED_ALARMS));
   } catch (e) {
     tasks = JSON.parse(JSON.stringify(DEFAULT_TASKS));
     scheduledAlarms = JSON.parse(JSON.stringify(SCHEDULED_ALARMS));
@@ -108,7 +112,7 @@ function saveData() {
   try {
     localStorage.setItem('innomotor_tasks_v2', JSON.stringify(tasks));
     localStorage.setItem('innomotor_settings', JSON.stringify(settings));
-    localStorage.setItem('innomotor_scheduled', JSON.stringify(scheduledAlarms));
+    // scheduledAlarms NO se persiste — se resetean desde el código fuente en cada sesión
   } catch (e) {}
 }
 
@@ -116,7 +120,7 @@ function resetToDefaults() {
   if (confirm('¿Seguro? Esto borra todos los cambios y restaura los datos originales.')) {
     localStorage.removeItem('innomotor_tasks_v2');
     localStorage.removeItem('innomotor_settings');
-    localStorage.removeItem('innomotor_scheduled');
+    localStorage.removeItem('innomotor_scheduled'); // limpieza por si había datos viejos
     location.reload();
   }
 }
@@ -203,7 +207,7 @@ function checkScheduledAlarms() {
     if (alarm.fired) return;
     if (alarm.date === today && currentTime >= alarm.time) {
       alarm.fired = true;
-      saveData();
+      // NO guardamos scheduledAlarms en localStorage — se resetean en cada sesión
       startAlarm({ title: alarm.title, desc: alarm.desc, date: alarm.date, amount: '', type: 'admin' });
       sendNotification('🔔 ' + alarm.title, alarm.desc);
     }

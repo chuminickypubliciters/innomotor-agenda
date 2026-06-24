@@ -1,4 +1,4 @@
-const CACHE_NAME = 'innomotor-agenda-v2';
+const CACHE_NAME = 'innomotor-agenda-v3';
 const ASSETS = [
   '/',
   '/index.html',
