@@ -1,6 +1,10 @@
 // ============================================
-// INNOMOTOR AGENDA v2 — Actualizado 24/06/2026
+// INNOMOTOR AGENDA v4 — Actualizado 24/06/2026 20:45h
 // ============================================
+
+// Fecha y hora de última actualización (actualizar en cada deploy)
+const APP_VERSION = 'v4';
+const APP_UPDATED = '24/06/2026 20:45h';
 
 // --- DATA ---
 const DEFAULT_TASKS = [
@@ -335,10 +339,11 @@ function render() {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <div title="Última actualización" style="font-size:10px;color:var(--text-secondary);text-align:right;line-height:1.4;cursor:default">
-          <div style="font-weight:600">🔄 v3</div>
-          <div>24/06/2026</div>
-          <div>20:30h</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+          <div id="reloj-topbar" style="font-size:15px;font-weight:700;color:#111;letter-spacing:0.5px;font-variant-numeric:tabular-nums">--:--:--</div>
+          <div title="Última actualización de la app" style="font-size:9px;color:#111;text-align:right;cursor:default;line-height:1.3">
+            <span style="font-weight:600">🔄 ${APP_VERSION}</span> · ${APP_UPDATED}
+          </div>
         </div>
         <button class="topbar-bell" onclick="testAlarm()">
           🔔
@@ -579,12 +584,28 @@ async function registerSW() {
 }
 
 // --- INIT ---
+// --- RELOJ EN TIEMPO REAL ---
+function startClock() {
+  function tick() {
+    const el = document.getElementById('reloj-topbar');
+    if (el) {
+      const now = new Date();
+      const h = now.getHours().toString().padStart(2,'0');
+      const m = now.getMinutes().toString().padStart(2,'0');
+      const s = now.getSeconds().toString().padStart(2,'0');
+      el.textContent = h + ':' + m + ':' + s;
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadData();
   render();
   registerSW();
   requestNotificationPermission();
   scheduleLocalAlarmCheck();
-  // Check scheduled alarms immediately
   checkScheduledAlarms();
+  startClock();
 });
