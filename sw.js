@@ -1,4 +1,4 @@
-const CACHE_NAME = 'innomotor-agenda-v9';
+const CACHE_NAME = 'innomotor-agenda-v10';
 const ASSETS = [
   '/',
   '/index.html',
@@ -9,32 +9,44 @@ const ASSETS = [
   '/icons/icon-512.png'
 ];
 
-// Install
 self.addEventListener('install', (event) => {
+  // Tomar control inmediatamente sin esperar
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
-  self.skipWaiting();
 });
 
-// Activate
 self.addEventListener('activate', (event) => {
   event.waitUntil(
+    // Borrar TODAS las cachés antiguas
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.map((k) => {
+        console.log('Borrando caché:', k);
+        return caches.delete(k);
+      }))
+    ).then(() => {
+      // Tomar control de todos los clientes abiertos
+      return self.clients.claim();
+    }).then(() => {
+      // Forzar recarga en todos los clientes
+      return self.clients.matchAll({ type: 'window' });
+    }).then((clients) => {
+      clients.forEach(client => client.navigate(client.url));
+    })
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  // Network first — siempre intentar red antes de caché
+  event.respondWith(
+    fetch(event.request).catch(() =>
+      caches.match(event.request)
     )
   );
-  self.clients.claim();
 });
 
-// Fetch
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
-});
-
-// ─── FIREBASE MESSAGING (push cuando app cerrada) ───
+// Firebase Messaging para push con app cerrada
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
@@ -49,16 +61,14 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Push en background (app cerrada o en segundo plano)
 messaging.onBackgroundMessage((payload) => {
-  console.log('INNOMOTOR push background:', payload);
   const title = payload.notification?.title || '🔔 INNOMOTOR Agenda';
   const body = payload.notification?.body || 'Tienes un plazo fiscal pendiente';
   self.registration.showNotification(title, {
     body,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    vibrate: [300, 100, 300, 100, 300, 100, 300],
+    vibrate: [300, 100, 300, 100, 300],
     requireInteraction: true,
     tag: 'innomotor-alarm',
     renotify: true,
@@ -69,20 +79,12 @@ messaging.onBackgroundMessage((payload) => {
   });
 });
 
-// Click en notificación
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  if (event.action === 'snooze') {
-    // No hacemos nada — el backend mandará otro push en 1h si se implementa
-    return;
-  }
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      if (clients.length > 0) {
-        clients[0].focus();
-      } else {
-        self.clients.openWindow('/');
-      }
+      if (clients.length > 0) clients[0].focus();
+      else self.clients.openWindow('/');
     })
   );
 });
