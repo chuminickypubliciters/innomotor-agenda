@@ -4,7 +4,7 @@
 
 // Fecha y hora de última actualización (actualizar en cada deploy)
 const APP_VERSION = 'v4';
-const APP_UPDATED = '24/06/2026 20:45h';
+const APP_UPDATED = '25/06/2026 12:40h';
 
 // --- DATA ---
 const DEFAULT_TASKS = [
@@ -71,8 +71,8 @@ const SCHEDULED_ALARMS = [
     id: "test-alarm-1",
     title: "✅ PRUEBA DE ALARMA — SISTEMA OK",
     desc: "Las alarmas programadas funcionan correctamente. Este mensaje confirma que el sistema de recordatorios de INNOMOTOR Agenda está operativo.",
-    time: "20:35",
-    date: "2026-06-24",
+    time: "12:50",
+    date: "2026-06-25",
     fired: false
   }
 ];
