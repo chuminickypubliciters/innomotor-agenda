@@ -423,6 +423,8 @@ function render() {
           <label class="toggle"><input type="checkbox" ${settings.alertDayOf ? 'checked' : ''} onchange="updateSetting('alertDayOf', this.checked)"><span class="toggle-slider"></span></label>
         </div>
         <button class="test-alarm-btn" onclick="testAlarm()">🔊 PROBAR ALARMA</button>
+        <button class="test-alarm-btn" style="margin-top:6px;background:#1a7a4a;border-color:#1a7a4a;color:#fff" onclick="registrarFCM()">📲 REGISTRAR NOTIFICACIONES PUSH</button>
+        <div id="fcm-status" style="margin-top:6px;font-size:11px;color:var(--text-secondary);text-align:center"></div>
         <button class="test-alarm-btn" style="margin-top:6px;border-color:var(--gray-300);color:var(--text-secondary);background:var(--gray-100)" onclick="resetToDefaults()">🔄 Restaurar datos originales</button>
       </div>` : ''}
     </div>`;
@@ -531,6 +533,51 @@ function toggleTask(id) {
 function toggleAlarmPanel() { alarmPanelOpen = !alarmPanelOpen; render(); }
 
 function updateSetting(key, value) { settings[key] = value; saveData(); }
+
+async function registrarFCM() {
+  const el = document.getElementById("fcm-status");
+  if (el) el.textContent = "⏳ Registrando...";
+  try {
+    // Pedir permiso notificaciones
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      if (el) el.textContent = "❌ Permiso denegado — actívalo en ajustes del navegador";
+      return;
+    }
+    // Obtener token FCM via función global expuesta desde index.html
+    if (!window._fcmMessaging) {
+      if (el) el.textContent = "❌ Firebase no cargado — recarga la app";
+      return;
+    }
+    const { getToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
+    const reg = await navigator.serviceWorker.ready;
+    const token = await getToken(window._fcmMessaging, {
+      vapidKey: window._fcmVapidKey,
+      serviceWorkerRegistration: reg
+    });
+    if (!token) {
+      if (el) el.textContent = "❌ No se pudo obtener token FCM";
+      return;
+    }
+    // Guardar token en Netlify
+    const res = await fetch("/.netlify/functions/save-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (el) el.textContent = "✅ Notificaciones push activadas";
+      localStorage.setItem("fcm_token", token);
+      console.log("FCM token guardado:", token.substring(0,30) + "...");
+    } else {
+      if (el) el.textContent = "⚠️ Token obtenido pero error al guardar";
+    }
+  } catch(e) {
+    if (el) el.textContent = "❌ Error: " + e.message;
+    console.error("registrarFCM error:", e);
+  }
+}
 
 function testAlarm() {
   const urgentTask = tasks.filter(t => t.status === 'pending').sort((a, b) => new Date(a.date) - new Date(b.date))[0];
