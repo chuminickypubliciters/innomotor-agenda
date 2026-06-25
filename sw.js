@@ -1,52 +1,24 @@
-const CACHE_NAME = 'innomotor-agenda-v10';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
-];
+// SW v11 — SIN CACHE, siempre red. Solo gestiona push notifications.
+const CACHE_NAME = 'innomotor-agenda-v11';
 
-self.addEventListener('install', (event) => {
-  // Tomar control inmediatamente sin esperar
+self.addEventListener('install', () => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-  );
 });
 
 self.addEventListener('activate', (event) => {
+  // Borrar TODAS las cachés
   event.waitUntil(
-    // Borrar TODAS las cachés antiguas
-    caches.keys().then((keys) =>
-      Promise.all(keys.map((k) => {
-        console.log('Borrando caché:', k);
-        return caches.delete(k);
-      }))
-    ).then(() => {
-      // Tomar control de todos los clientes abiertos
-      return self.clients.claim();
-    }).then(() => {
-      // Forzar recarga en todos los clientes
-      return self.clients.matchAll({ type: 'window' });
-    }).then((clients) => {
-      clients.forEach(client => client.navigate(client.url));
-    })
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+    .then(() => self.clients.claim())
   );
 });
 
+// SIN caché — todo va a la red siempre
 self.addEventListener('fetch', (event) => {
-  // Network first — siempre intentar red antes de caché
-  event.respondWith(
-    fetch(event.request).catch(() =>
-      caches.match(event.request)
-    )
-  );
+  event.respondWith(fetch(event.request));
 });
 
-// Firebase Messaging para push con app cerrada
+// Firebase para push con app cerrada
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
@@ -67,7 +39,6 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, {
     body,
     icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
     vibrate: [300, 100, 300, 100, 300],
     requireInteraction: true,
     tag: 'innomotor-alarm',
