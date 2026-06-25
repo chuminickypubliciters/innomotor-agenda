@@ -16,6 +16,65 @@
 </head>
 <body>
   <div id="app"></div>
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBrjuaAOcbXdf6AYIs1zkE32QO9PcJ2qG4",
+      authDomain: "chuminicky-dwall.firebaseapp.com",
+      projectId: "chuminicky-dwall",
+      storageBucket: "chuminicky-dwall.firebasestorage.app",
+      messagingSenderId: "792658008584",
+      appId: "1:792658008584:web:304562a3970e2095eb0fbd"
+    };
+
+    const VAPID_KEY = 'BFJJDQCdTWZJPLeK5fVEwPBpY31FBrwiUEoX-hnvTAZVSvyEFXmbguBBieeSnz4uCQpcdTuhuDFNhmySvSJ3g6s';
+
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    // Exponer al app.js global
+    window._fcmMessaging = messaging;
+    window._fcmVapidKey = VAPID_KEY;
+
+    // Cuando la app está ABIERTA y llega un push — mostrar alarma visual
+    onMessage(messaging, (payload) => {
+      console.log('FCM mensaje recibido (app abierta):', payload);
+      if (window.startAlarm) {
+        window.startAlarm({
+          title: payload.notification?.title || 'INNOMOTOR',
+          desc: payload.notification?.body || '',
+          date: '',
+          amount: '',
+          type: 'admin'
+        });
+      }
+    });
+
+    // Registrar token FCM en cuanto el SW esté listo
+    navigator.serviceWorker.ready.then(async (reg) => {
+      try {
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: reg
+        });
+        if (token) {
+          console.log('FCM Token:', token);
+          localStorage.setItem('fcm_token', token);
+          // Enviar token al backend para guardarlo
+          await fetch('/.netlify/functions/save-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          });
+        }
+      } catch (e) {
+        console.warn('No se pudo obtener token FCM:', e);
+      }
+    });
+  </script>
   <script src="/app.js"></script>
 </body>
 </html>

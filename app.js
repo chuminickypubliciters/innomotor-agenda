@@ -4,7 +4,7 @@
 
 // Fecha y hora de última actualización (actualizar en cada deploy)
 const APP_VERSION = 'v4';
-const APP_UPDATED = '25/06/2026 12:45h';
+const APP_UPDATED = '25/06/2026 13:15h';
 
 // --- DATA ---
 const DEFAULT_TASKS = [

@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# check-alarms se ejecuta cada minuto
+[[plugins]]
+
+[functions."check-alarms"]
+  schedule = "* * * * *"

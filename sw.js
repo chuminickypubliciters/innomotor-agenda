@@ -1,4 +1,4 @@
-const CACHE_NAME = 'innomotor-agenda-v7';
+const CACHE_NAME = 'innomotor-agenda-v8';
 const ASSETS = [
   '/',
   '/index.html',
@@ -9,7 +9,7 @@ const ASSETS = [
   '/icons/icon-512.png'
 ];
 
-// Install — cache all assets
+// Install
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate — clean old caches
+// Activate
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -27,74 +27,62 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch — serve from cache, fallback to network
+// Fetch
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
 });
 
-// Push notification received
-self.addEventListener('push', (event) => {
-  let data = { title: 'INNOMOTOR Agenda', body: 'Tienes un plazo fiscal pendiente' };
-  if (event.data) {
-    try { data = event.data.json(); } catch (e) { data.body = event.data.text(); }
-  }
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
-      vibrate: [300, 100, 300, 100, 300],
-      requireInteraction: true,
-      tag: data.tag || 'innomotor-alarm',
-      renotify: true,
-      actions: [
-        { action: 'confirm', title: 'ENTERADO' },
-        { action: 'snooze', title: 'Recordar en 1h' }
-      ]
-    })
-  );
+// ─── FIREBASE MESSAGING (push cuando app cerrada) ───
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey: "AIzaSyBrjuaAOcbXdf6AYIs1zkE32QO9PcJ2qG4",
+  authDomain: "chuminicky-dwall.firebaseapp.com",
+  projectId: "chuminicky-dwall",
+  storageBucket: "chuminicky-dwall.firebasestorage.app",
+  messagingSenderId: "792658008584",
+  appId: "1:792658008584:web:304562a3970e2095eb0fbd"
 });
 
-// Notification click
+const messaging = firebase.messaging();
+
+// Push en background (app cerrada o en segundo plano)
+messaging.onBackgroundMessage((payload) => {
+  console.log('INNOMOTOR push background:', payload);
+  const title = payload.notification?.title || '🔔 INNOMOTOR Agenda';
+  const body = payload.notification?.body || 'Tienes un plazo fiscal pendiente';
+  self.registration.showNotification(title, {
+    body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    vibrate: [300, 100, 300, 100, 300, 100, 300],
+    requireInteraction: true,
+    tag: 'innomotor-alarm',
+    renotify: true,
+    actions: [
+      { action: 'confirm', title: '✅ ENTERADO' },
+      { action: 'snooze', title: '⏰ Recordar en 1h' }
+    ]
+  });
+});
+
+// Click en notificación
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'snooze') {
-    // Re-notify in 1 hour
-    setTimeout(() => {
-      self.registration.showNotification('INNOMOTOR Agenda', {
-        body: event.notification.body,
-        icon: '/icons/icon-192.png',
-        vibrate: [300, 100, 300, 100, 300],
-        requireInteraction: true,
-        tag: 'innomotor-alarm-snooze',
-        renotify: true
-      });
-    }, 3600000);
-  } else {
-    event.waitUntil(
-      self.clients.matchAll({ type: 'window' }).then((clients) => {
-        if (clients.length > 0) {
-          clients[0].focus();
-        } else {
-          self.clients.openWindow('/');
-        }
-      })
-    );
+    // No hacemos nada — el backend mandará otro push en 1h si se implementa
+    return;
   }
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      if (clients.length > 0) {
+        clients[0].focus();
+      } else {
+        self.clients.openWindow('/');
+      }
+    })
+  );
 });
-
-// Periodic background sync for alarm checks
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'check-deadlines') {
-    event.waitUntil(checkDeadlines());
-  }
-});
-
-async function checkDeadlines() {
-  const clients = await self.clients.matchAll();
-  if (clients.length > 0) {
-    clients[0].postMessage({ type: 'CHECK_DEADLINES' });
-  }
-}
