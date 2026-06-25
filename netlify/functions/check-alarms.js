@@ -1,21 +1,19 @@
 // Netlify Function: check-alarms (scheduled cada minuto)
-// Usa Firebase Admin SDK V1 para mandar push aunque la app esté cerrada
+// FCM V1 con JWT OAuth2 — sin dependencias externas
 
 const FIREBASE_PROJECT = 'chuminicky-dwall';
 const CLIENT_EMAIL = 'firebase-adminsdk-fbsvc@chuminicky-dwall.iam.gserviceaccount.com';
 
-// Alarmas programadas por hora exacta (sincronizar con SCHEDULED_ALARMS de app.js)
 const SCHEDULED_ALARMS = [
   {
     id: "test-alarm-prueba",
     title: "🔔 PRUEBA PUSH — INNOMOTOR",
-    desc: "Las notificaciones push funcionan con la app cerrada. Sistema operativo.",
+    desc: "Notificaciones push funcionando con app cerrada. Sistema operativo.",
     time: "12:55",
     date: "2026-06-25"
   }
 ];
 
-// Plazos fiscales (sincronizar con DEFAULT_TASKS de app.js)
 const DEADLINE_TASKS = [
   { id: 1,  title: "Modelo 303 — IVA Q2/2026",           date: "2026-07-20", amount: "0€" },
   { id: 2,  title: "Modelo 130 — IRPF Q2/2026",           date: "2026-07-20", amount: "0€" },
@@ -26,9 +24,9 @@ const DEADLINE_TASKS = [
   { id: 7,  title: "Factura alquiler — rectificar",        date: "2026-07-31", amount: "" },
 ];
 
-// ─── JWT para autenticar con Google OAuth2 ───
 async function getAccessToken(privateKeyPem) {
   const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
   const payload = {
     iss: CLIENT_EMAIL,
     scope: 'https://www.googleapis.com/auth/firebase.messaging',
@@ -37,31 +35,24 @@ async function getAccessToken(privateKeyPem) {
     exp: now + 3600
   };
 
-  // Crear JWT manualmente (sin librerías externas)
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
-  const signingInput = `${b64(header)}.${b64(payload)}`;
+  const b64url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+  const signingInput = `${b64url(header)}.${b64url(payload)}`;
 
-  // Importar clave privada
   const keyData = privateKeyPem
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\n/g, '');
-  const binaryKey = Buffer.from(keyData, 'base64');
+    .replace(/\s/g, '');
+
   const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8', binaryKey,
+    'pkcs8',
+    Buffer.from(keyData, 'base64'),
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false, ['sign']
   );
 
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    Buffer.from(signingInput)
-  );
-  const jwt = `${signingInput}.${Buffer.from(signature).toString('base64url')}`;
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, Buffer.from(signingInput));
+  const jwt = `${signingInput}.${Buffer.from(sig).toString('base64url')}`;
 
-  // Intercambiar JWT por access token
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -72,7 +63,6 @@ async function getAccessToken(privateKeyPem) {
   return data.access_token;
 }
 
-// ─── Enviar notificación push via FCM V1 ───
 async function sendPush(token, title, body, accessToken) {
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT}/messages:send`,
@@ -92,8 +82,7 @@ async function sendPush(token, title, body, accessToken) {
             notification: {
               title, body,
               icon: '/icons/icon-192.png',
-              requireInteraction: true,
-              vibrate: [300, 100, 300, 100, 300]
+              requireInteraction: true
             }
           }
         }
@@ -105,25 +94,25 @@ async function sendPush(token, title, body, accessToken) {
   return data;
 }
 
-// ─── HANDLER PRINCIPAL ───
 exports.handler = async () => {
-  // Hora España (UTC+2 verano)
   const now = new Date();
   const spainNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   const todayStr = spainNow.toISOString().split('T')[0];
-  const currentTime = spainNow.getUTCHours().toString().padStart(2,'0') + ':' + spainNow.getUTCMinutes().toString().padStart(2,'0');
+  const hh = spainNow.getUTCHours().toString().padStart(2,'0');
+  const mm = spainNow.getUTCMinutes().toString().padStart(2,'0');
+  const currentTime = `${hh}:${mm}`;
 
-  console.log(`check-alarms: ${todayStr} ${currentTime} hora España`);
+  console.log(`check-alarms: ${todayStr} ${currentTime} (España)`);
 
-  // Obtener token FCM del dispositivo
-  const { getStore } = require('@netlify/blobs');
+  // Obtener token FCM
   let fcmToken;
   try {
-    const store = getStore('fcm-tokens');
+    const { getStore } = require('@netlify/blobs');
+    const store = getStore({ name: 'fcm-tokens', consistency: 'strong' });
     fcmToken = await store.get('innomotor-pablo');
   } catch (e) {
-    console.error('Error obteniendo token FCM:', e.message);
-    return { statusCode: 200, body: 'Sin token guardado aún' };
+    console.log('Blobs no disponible o sin token:', e.message);
+    return { statusCode: 200, body: 'Sin token' };
   }
 
   if (!fcmToken) {
@@ -131,54 +120,49 @@ exports.handler = async () => {
     return { statusCode: 200, body: 'Sin token' };
   }
 
-  // Recopilar notificaciones a enviar
   const toSend = [];
 
-  // 1. Alarmas por hora exacta
+  // Alarmas por hora exacta
   for (const alarm of SCHEDULED_ALARMS) {
     if (alarm.date === todayStr && alarm.time === currentTime) {
       toSend.push({ title: alarm.title, body: alarm.desc });
     }
   }
 
-  // 2. Plazos fiscales — solo a las 09:00
+  // Plazos fiscales a las 09:00
   if (currentTime === '09:00') {
     for (const task of DEADLINE_TASKS) {
       const diffDays = Math.round(
-        (new Date(task.date + 'T00:00:00Z') - new Date(todayStr + 'T00:00:00Z'))
-        / 86400000
+        (new Date(task.date + 'T00:00:00Z') - new Date(todayStr + 'T00:00:00Z')) / 86400000
       );
       const suffix = task.amount ? ` — ${task.amount}` : '';
       if (diffDays === 5)      toSend.push({ title: '⚠️ Vence en 5 días',  body: task.title + suffix });
-      else if (diffDays === 1) toSend.push({ title: '🔴 ¡VENCE MAÑANA!',  body: task.title + suffix });
-      else if (diffDays === 0) toSend.push({ title: '🚨 ¡VENCE HOY!',     body: task.title + suffix });
+      else if (diffDays === 1) toSend.push({ title: '🔴 ¡VENCE MAÑANA!',   body: task.title + suffix });
+      else if (diffDays === 0) toSend.push({ title: '🚨 ¡VENCE HOY!',      body: task.title + suffix });
     }
   }
 
   if (toSend.length === 0) {
-    console.log('Sin alarmas este minuto');
-    return { statusCode: 200, body: 'Sin alarmas' };
+    return { statusCode: 200, body: 'Sin alarmas este minuto' };
   }
 
-  // Obtener access token OAuth2
   const privateKey = process.env.FCM_PRIVATE_KEY.replace(/\\n/g, '\n');
   let accessToken;
   try {
     accessToken = await getAccessToken(privateKey);
   } catch (e) {
-    console.error('Error obteniendo access token:', e.message);
+    console.error('Error auth JWT:', e.message);
     return { statusCode: 500, body: 'Error auth: ' + e.message };
   }
 
-  // Enviar notificaciones
   const results = [];
   for (const n of toSend) {
     try {
       const r = await sendPush(fcmToken, n.title, n.body, accessToken);
-      console.log('Push enviado:', n.title, r.name);
+      console.log('Push OK:', n.title);
       results.push({ ok: true, title: n.title });
     } catch (e) {
-      console.error('Error enviando push:', e.message);
+      console.error('Error push:', e.message);
       results.push({ ok: false, error: e.message });
     }
   }
